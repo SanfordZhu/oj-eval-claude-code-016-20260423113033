@@ -8,7 +8,7 @@
 using namespace std;
 
 const int MAX_KEY_LEN = 64;
-const int ORDER = 50;
+const int ORDER = 40;
 const int NODE_SIZE = 4096;
 
 const int INTERNAL = 0;
@@ -50,6 +50,7 @@ private:
     void writeHeader() {
         file.seekp(0, ios::beg);
         file.write((char*)&header, sizeof(Header));
+        file.flush();
     }
 
     void readHeader() {
@@ -105,7 +106,6 @@ private:
             if (node.type == LEAF) break;
             int i = 0;
             while (i < node.count && key > node.keys[i]) i++;
-            if (i > node.count) i = node.count;
             pos = node.children[i];
         }
         return pos;
@@ -271,119 +271,74 @@ private:
         node.count--;
     }
 
-    void borrowFromLeft(Node& node, Node& leftSibling, int parentPos, int idx) {
-        if (node.type == LEAF) {
-            for (int i = node.count; i > 0; i--) {
-                strncpy(node.keys[i], node.keys[i - 1], MAX_KEY_LEN);
-                node.keys[i][MAX_KEY_LEN] = '\0';
-                node.values[i] = node.values[i - 1];
-            }
-            strncpy(node.keys[0], leftSibling.keys[leftSibling.count - 1], MAX_KEY_LEN);
-            node.keys[0][MAX_KEY_LEN] = '\0';
-            node.values[0] = leftSibling.values[leftSibling.count - 1];
-            node.count++;
-            leftSibling.count--;
-
-            Node parent;
-            readNode(parentPos, parent);
-            strncpy(parent.keys[idx], node.keys[0], MAX_KEY_LEN);
-            parent.keys[idx][MAX_KEY_LEN] = '\0';
-            writeNode(parentPos, parent);
-        } else {
-            for (int i = node.count; i > 0; i--) {
-                strncpy(node.keys[i], node.keys[i - 1], MAX_KEY_LEN);
-                node.keys[i][MAX_KEY_LEN] = '\0';
-            }
-            for (int i = node.count + 1; i > 0; i--) {
-                node.children[i] = node.children[i - 1];
-            }
-            strncpy(node.keys[0], leftSibling.keys[leftSibling.count - 1], MAX_KEY_LEN);
-            node.keys[0][MAX_KEY_LEN] = '\0';
-            node.children[0] = leftSibling.children[leftSibling.count];
-            node.count++;
-
-            Node parent;
-            readNode(parentPos, parent);
-            strncpy(parent.keys[idx], leftSibling.keys[leftSibling.count - 1], MAX_KEY_LEN);
-            parent.keys[idx][MAX_KEY_LEN] = '\0';
-            writeNode(parentPos, parent);
-
-            leftSibling.count--;
+    void borrowFromLeftLeaf(Node& node, Node& leftSibling, int parentPos, int idx) {
+        for (int i = node.count; i > 0; i--) {
+            strncpy(node.keys[i], node.keys[i - 1], MAX_KEY_LEN);
+            node.keys[i][MAX_KEY_LEN] = '\0';
+            node.values[i] = node.values[i - 1];
         }
+        strncpy(node.keys[0], leftSibling.keys[leftSibling.count - 1], MAX_KEY_LEN);
+        node.keys[0][MAX_KEY_LEN] = '\0';
+        node.values[0] = leftSibling.values[leftSibling.count - 1];
+        node.count++;
+        leftSibling.count--;
+
+        Node parent;
+        readNode(parentPos, parent);
+        strncpy(parent.keys[idx], node.keys[0], MAX_KEY_LEN);
+        parent.keys[idx][MAX_KEY_LEN] = '\0';
+        writeNode(parentPos, parent);
     }
 
-    void borrowFromRight(Node& node, Node& rightSibling, int parentPos, int idx) {
-        if (node.type == LEAF) {
-            strncpy(node.keys[node.count], rightSibling.keys[0], MAX_KEY_LEN);
-            node.keys[node.count][MAX_KEY_LEN] = '\0';
-            node.values[node.count] = rightSibling.values[0];
-            node.count++;
+    void borrowFromRightLeaf(Node& node, Node& rightSibling, int parentPos, int idx) {
+        strncpy(node.keys[node.count], rightSibling.keys[0], MAX_KEY_LEN);
+        node.keys[node.count][MAX_KEY_LEN] = '\0';
+        node.values[node.count] = rightSibling.values[0];
+        node.count++;
 
-            for (int i = 0; i < rightSibling.count - 1; i++) {
-                strncpy(rightSibling.keys[i], rightSibling.keys[i + 1], MAX_KEY_LEN);
-                rightSibling.keys[i][MAX_KEY_LEN] = '\0';
-                rightSibling.values[i] = rightSibling.values[i + 1];
-            }
-            rightSibling.count--;
-
-            Node parent;
-            readNode(parentPos, parent);
-            strncpy(parent.keys[idx], rightSibling.keys[0], MAX_KEY_LEN);
-            parent.keys[idx][MAX_KEY_LEN] = '\0';
-            writeNode(parentPos, parent);
-        } else {
-            strncpy(node.keys[node.count], rightSibling.keys[0], MAX_KEY_LEN);
-            node.keys[node.count][MAX_KEY_LEN] = '\0';
-            node.children[node.count + 1] = rightSibling.children[0];
-            node.count++;
-
-            for (int i = 0; i < rightSibling.count - 1; i++) {
-                strncpy(rightSibling.keys[i], rightSibling.keys[i + 1], MAX_KEY_LEN);
-                rightSibling.keys[i][MAX_KEY_LEN] = '\0';
-            }
-            for (int i = 0; i <= rightSibling.count; i++) {
-                rightSibling.children[i] = rightSibling.children[i + 1];
-            }
-
-            Node parent;
-            readNode(parentPos, parent);
-            strncpy(parent.keys[idx], rightSibling.keys[0], MAX_KEY_LEN);
-            parent.keys[idx][MAX_KEY_LEN] = '\0';
-            writeNode(parentPos, parent);
-
-            rightSibling.count--;
+        for (int i = 0; i < rightSibling.count - 1; i++) {
+            strncpy(rightSibling.keys[i], rightSibling.keys[i + 1], MAX_KEY_LEN);
+            rightSibling.keys[i][MAX_KEY_LEN] = '\0';
+            rightSibling.values[i] = rightSibling.values[i + 1];
         }
+        rightSibling.count--;
+
+        Node parent;
+        readNode(parentPos, parent);
+        strncpy(parent.keys[idx], rightSibling.keys[0], MAX_KEY_LEN);
+        parent.keys[idx][MAX_KEY_LEN] = '\0';
+        writeNode(parentPos, parent);
     }
 
-    void mergeNodes(Node& left, Node& right, int parentPos, int idx) {
-        if (left.type == LEAF) {
-            for (int i = 0; i < right.count; i++) {
-                strncpy(left.keys[left.count], right.keys[i], MAX_KEY_LEN);
-                left.keys[left.count][MAX_KEY_LEN] = '\0';
-                left.values[left.count] = right.values[i];
-                left.count++;
-            }
-            left.next = right.next;
-        } else {
-            strncpy(left.keys[left.count], right.keys[0], MAX_KEY_LEN);
+    void mergeLeafs(Node& left, Node& right) {
+        for (int i = 0; i < right.count; i++) {
+            strncpy(left.keys[left.count], right.keys[i], MAX_KEY_LEN);
             left.keys[left.count][MAX_KEY_LEN] = '\0';
+            left.values[left.count] = right.values[i];
             left.count++;
-            for (int i = 0; i < right.count; i++) {
-                strncpy(left.keys[left.count], right.keys[i], MAX_KEY_LEN);
-                left.keys[left.count][MAX_KEY_LEN] = '\0';
-                left.children[left.count] = right.children[i];
-                Node child;
-                readNode(right.children[i], child);
-                child.parent = -1;
-                writeNode(right.children[i], child);
-                left.count++;
-            }
-            left.children[left.count] = right.children[right.count];
-            Node child;
-            readNode(right.children[right.count], child);
-            child.parent = -1;
-            writeNode(right.children[right.count], child);
         }
+        left.next = right.next;
+    }
+
+    void mergeInternals(Node& left, Node& right, const string& midKey) {
+        strncpy(left.keys[left.count], midKey.c_str(), MAX_KEY_LEN);
+        left.keys[left.count][MAX_KEY_LEN] = '\0';
+        left.count++;
+        for (int i = 0; i < right.count; i++) {
+            strncpy(left.keys[left.count], right.keys[i], MAX_KEY_LEN);
+            left.keys[left.count][MAX_KEY_LEN] = '\0';
+            left.children[left.count] = right.children[i];
+            Node child;
+            readNode(right.children[i], child);
+            child.parent = -1;
+            writeNode(right.children[i], child);
+            left.count++;
+        }
+        left.children[left.count] = right.children[right.count];
+        Node child;
+        readNode(right.children[right.count], child);
+        child.parent = -1;
+        writeNode(right.children[right.count], child);
     }
 
     void rebalance(int nodePos) {
@@ -400,7 +355,7 @@ private:
         Node node;
         readNode(nodePos, node);
 
-        int minKeys = ORDER / 2 - 1;
+        int minKeys = (ORDER + 1) / 2 - 1;
         if (node.count >= minKeys) return;
 
         int parentPos = node.parent;
@@ -422,122 +377,108 @@ private:
             rightPos = parent.children[idx + 1];
             readNode(rightPos, rightSibling);
         }
-
-        if (leftPos != -1 && leftSibling.count > minKeys) {
-            borrowFromLeft(node, leftSibling, parentPos, idx - 1);
-            writeNode(nodePos, node);
-            writeNode(leftPos, leftSibling);
-            return;
-        }
-
-        if (rightPos != -1 && rightSibling.count > minKeys) {
-            borrowFromRight(node, rightSibling, parentPos, idx);
-            writeNode(nodePos, node);
-            writeNode(rightPos, rightSibling);
-            return;
-        }
-
-        if (leftPos != -1) {
-            mergeNodes(leftSibling, node, parentPos, idx - 1);
-            writeNode(leftPos, leftSibling);
-            freeNode(nodePos);
-            removeFromInternal(parent, idx - 1);
-            writeNode(parentPos, parent);
-            rebalance(parentPos);
-        } else if (rightPos != -1) {
-            mergeNodes(node, rightSibling, parentPos, idx);
-            writeNode(nodePos, node);
-            freeNode(rightPos);
-            removeFromInternal(parent, idx);
-            writeNode(parentPos, parent);
-            rebalance(parentPos);
-        }
-    }
-
-    void deleteEntry(int nodePos, const string& key) {
-        Node node;
-        readNode(nodePos, node);
 
         if (node.type == LEAF) {
-            int idx = -1;
-            for (int i = 0; i < node.count; i++) {
-                if (strcmp(node.keys[i], key.c_str()) == 0) {
-                    idx = i;
-                    break;
-                }
-            }
-            if (idx != -1) {
-                removeFromLeaf(node, idx);
+            if (leftPos != -1 && leftSibling.count > minKeys) {
+                borrowFromLeftLeaf(node, leftSibling, parentPos, idx - 1);
                 writeNode(nodePos, node);
+                writeNode(leftPos, leftSibling);
+                return;
+            }
+            if (rightPos != -1 && rightSibling.count > minKeys) {
+                borrowFromRightLeaf(node, rightSibling, parentPos, idx);
+                writeNode(nodePos, node);
+                writeNode(rightPos, rightSibling);
+                return;
+            }
+            if (leftPos != -1) {
+                mergeLeafs(leftSibling, node);
+                writeNode(leftPos, leftSibling);
+                freeNode(nodePos);
+                removeFromInternal(parent, idx - 1);
+                writeNode(parentPos, parent);
+                rebalance(parentPos);
+            } else if (rightPos != -1) {
+                mergeLeafs(node, rightSibling);
+                writeNode(nodePos, node);
+                freeNode(rightPos);
+                removeFromInternal(parent, idx);
+                writeNode(parentPos, parent);
+                rebalance(parentPos);
             }
         } else {
-            int idx = 0;
-            while (idx < node.count && key >= node.keys[idx]) idx++;
-            if (idx > node.count) idx = node.count;
-            deleteEntry(node.children[idx], key);
-        }
+            if (leftPos != -1 && leftSibling.count > minKeys) {
+                for (int i = node.count; i > 0; i--) {
+                    strncpy(node.keys[i], node.keys[i - 1], MAX_KEY_LEN);
+                    node.keys[i][MAX_KEY_LEN] = '\0';
+                }
+                for (int i = node.count + 1; i > 0; i--) {
+                    node.children[i] = node.children[i - 1];
+                }
+                strncpy(node.keys[0], leftSibling.keys[leftSibling.count - 1], MAX_KEY_LEN);
+                node.keys[0][MAX_KEY_LEN] = '\0';
+                node.children[0] = leftSibling.children[leftSibling.count];
+                node.count++;
 
-        if (nodePos == header.rootPos) {
-            Node root;
-            readNode(nodePos, root);
-            if (root.count == 0 && root.type == INTERNAL) {
-                header.rootPos = root.children[0];
-                writeHeader();
+                Node child;
+                readNode(node.children[0], child);
+                child.parent = nodePos;
+                writeNode(node.children[0], child);
+
+                strncpy(parent.keys[idx - 1], leftSibling.keys[leftSibling.count - 1], MAX_KEY_LEN);
+                parent.keys[idx - 1][MAX_KEY_LEN] = '\0';
+                leftSibling.count--;
+
+                writeNode(nodePos, node);
+                writeNode(leftPos, leftSibling);
+                writeNode(parentPos, parent);
+                return;
             }
-            return;
-        }
+            if (rightPos != -1 && rightSibling.count > minKeys) {
+                strncpy(node.keys[node.count], rightSibling.keys[0], MAX_KEY_LEN);
+                node.keys[node.count][MAX_KEY_LEN] = '\0';
+                node.children[node.count + 1] = rightSibling.children[0];
+                node.count++;
 
-        int minKeys = ORDER / 2 - 1;
-        if (node.count >= minKeys) return;
+                Node child;
+                readNode(node.children[node.count], child);
+                child.parent = nodePos;
+                writeNode(node.children[node.count], child);
 
-        int parentPos = node.parent;
-        if (parentPos == -1) return;
+                strncpy(parent.keys[idx], rightSibling.keys[0], MAX_KEY_LEN);
+                parent.keys[idx][MAX_KEY_LEN] = '\0';
 
-        Node parent;
-        readNode(parentPos, parent);
+                for (int i = 0; i < rightSibling.count - 1; i++) {
+                    strncpy(rightSibling.keys[i], rightSibling.keys[i + 1], MAX_KEY_LEN);
+                    rightSibling.keys[i][MAX_KEY_LEN] = '\0';
+                }
+                for (int i = 0; i <= rightSibling.count; i++) {
+                    rightSibling.children[i] = rightSibling.children[i + 1];
+                }
+                rightSibling.count--;
 
-        int idx = 0;
-        while (idx <= parent.count && parent.children[idx] != nodePos) idx++;
-
-        Node leftSibling, rightSibling;
-        int leftPos = -1, rightPos = -1;
-        if (idx > 0) {
-            leftPos = parent.children[idx - 1];
-            readNode(leftPos, leftSibling);
-        }
-        if (idx < parent.count) {
-            rightPos = parent.children[idx + 1];
-            readNode(rightPos, rightSibling);
-        }
-
-        if (leftPos != -1 && leftSibling.count > minKeys) {
-            borrowFromLeft(node, leftSibling, parentPos, idx - 1);
-            writeNode(nodePos, node);
-            writeNode(leftPos, leftSibling);
-            return;
-        }
-
-        if (rightPos != -1 && rightSibling.count > minKeys) {
-            borrowFromRight(node, rightSibling, parentPos, idx);
-            writeNode(nodePos, node);
-            writeNode(rightPos, rightSibling);
-            return;
-        }
-
-        if (leftPos != -1) {
-            mergeNodes(leftSibling, node, parentPos, idx - 1);
-            writeNode(leftPos, leftSibling);
-            freeNode(nodePos);
-            removeFromInternal(parent, idx - 1);
-            writeNode(parentPos, parent);
-            rebalance(parentPos);
-        } else if (rightPos != -1) {
-            mergeNodes(node, rightSibling, parentPos, idx);
-            writeNode(nodePos, node);
-            freeNode(rightPos);
-            removeFromInternal(parent, idx);
-            writeNode(parentPos, parent);
-            rebalance(parentPos);
+                writeNode(nodePos, node);
+                writeNode(rightPos, rightSibling);
+                writeNode(parentPos, parent);
+                return;
+            }
+            if (leftPos != -1) {
+                string midKey = parent.keys[idx - 1];
+                mergeInternals(leftSibling, node, midKey);
+                writeNode(leftPos, leftSibling);
+                freeNode(nodePos);
+                removeFromInternal(parent, idx - 1);
+                writeNode(parentPos, parent);
+                rebalance(parentPos);
+            } else if (rightPos != -1) {
+                string midKey = parent.keys[idx];
+                mergeInternals(node, rightSibling, midKey);
+                writeNode(nodePos, node);
+                freeNode(rightPos);
+                removeFromInternal(parent, idx);
+                writeNode(parentPos, parent);
+                rebalance(parentPos);
+            }
         }
     }
 
@@ -616,7 +557,7 @@ public:
         if (idx != -1) {
             removeFromLeaf(leaf, idx);
             writeNode(leafPos, leaf);
-            deleteEntry(leafPos, key);
+            rebalance(leafPos);
         }
     }
 
